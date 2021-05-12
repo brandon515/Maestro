@@ -51,7 +51,12 @@ use tracing_subscriber::{
 };
 
 use commands::{
-    boombox::*,
+    play::*,
+    skip::*,
+    add::*,
+    pause::*,
+    stop::*,
+    queue::*,
     SongInfo,
     check_msg,
     MusicQueue,
@@ -176,7 +181,7 @@ async fn main() {
                                 Some(handler_lock) => {
                                     let mut handler = handler_lock.lock().await;
 
-                                    let source = match commands::boombox::make_source(&next_song){
+                                    let source = match commands::make_source(&next_song){
                                         Some(src) => src,
                                         None => {
                                             error!("Failed to play the next song");

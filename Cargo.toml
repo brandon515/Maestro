@@ -7,15 +7,21 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+dotenv = "0.15"
 tracing = "0.1"
 tracing-subscriber = "0.2"
 tracing-futures = "0.2"
-songbird = "0.1"
+serde_json = "1.0"
+
+[dependencies.songbird]
+git = "https://github.com/brandon515/songbird.git"
+branch = "current"
+version = "0.1.7"
 
 [dependencies.serenity]
 version = "0.10"
-features = ["client", "framework", "standard_framework", "voice", "rustls_backend"]
+features = ["cache", "client", "framework", "standard_framework", "voice", "rustls_backend"]
 
 [dependencies.tokio]
 version = "1.0"
-features = ["macros", "rt-multi-thread"]
+features = ["signal", "macros", "rt-multi-thread"]

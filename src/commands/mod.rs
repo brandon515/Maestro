@@ -1,4 +1,9 @@
 use std::{
+    process::{
+        Command,
+        Stdio,
+        Child,
+    },
     time::{
         Instant,
     },
@@ -26,12 +31,29 @@ use serenity::{
 use serde_json::{
     Value,
     Map as JsonMap,
+    Result as JsonResult,
+};
+use songbird::{
+    input::{
+        Codec,
+        Container,
+        Metadata,
+        Input,
+        child::{
+            children_to_reader,
+        },
+    },
 };
 
 
 use tracing::error;
 
-pub mod boombox;
+pub mod play;
+pub mod skip;
+pub mod add;
+pub mod pause;
+pub mod stop;
+pub mod queue;
 
 pub struct MusicQueue;
 
@@ -60,6 +82,83 @@ impl TypeMapKey for CurrentSong{
 pub struct SongInfo{
     pub json_map: JsonMap<String, Value>,
     pub channel: ChannelId,
+}
+
+pub fn process_output(data: String, chan: ChannelId) -> Option<SongInfo>{
+    // The input should be a raw json object in text
+    let res: JsonResult<Value> = serde_json::from_str(&data);
+    let json_map = match res{
+        Ok(v) => {
+            // return it as a map with the signature SerdeMap<String, Value>
+            v.as_object()?.clone()
+        },
+        Err(err) => {
+            // Shit's gone sideways
+            error!("Error parsing youtube json: {:?}", err);
+            return None
+        },
+    };
+    // Slap that json_map in there, it's got all the info we could ever want on the song
+    // I've added the channel so that everyone knows where to send messages too 
+    Some(SongInfo{
+        json_map: json_map,
+        channel: chan,
+    })
+}
+
+pub fn make_source(data: &SongInfo) -> Option<Input>{
+    // This actually runs in the background and feeds data to the websocket, that's pretty cool
+    let ffmpeg = Command::new("ffmpeg")
+        .arg("-i")
+        .arg(data.json_map.get("url").and_then(serde_json::Value::as_str)?) //this is the only point of failure
+        .args(&[
+            "-loglevel",
+            "quiet",
+            "-hide_banner",
+            "-f",
+            "s16le",// THIS IS AN L NOT A 1, THIS FUCKING FONT 
+            "-ac", 
+            "2",
+            "-ar",
+            "48000",
+            "-acodec",
+            "pcm_f32le", // this if f32 little edian because that's what songbird needs it to be
+            "-",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let metadata = Metadata::from_ytdl_output(Value::Object(data.json_map.clone()));
+
+    Some(Input::new(
+            true, // It's stereo
+            children_to_reader::<f32>(vec![ffmpeg]), // This is the actual data from the ffmpeg program running in the background
+            Codec::FloatPcm, //this is the codec we put in the up above
+            Container::Raw, // IT'S FOOKIN RAW
+            Some(metadata), // metadata taken from the youtube json object
+    ))
+}
+
+pub fn pull_youtube_child(url: String) -> Child{
+    Command::new("youtube-dl")
+        .args(&[
+            "-f",
+            "webm[abr>0]/bestaudio/best",
+            "--print-json",
+            "--skip-download",
+            "-u",
+            "brandon.haley94@gmail.com",
+            "-p",
+            "H6A3l5e5yb1!!",
+            //"--newline",
+            &url,
+        ])
+        .stdin(Stdio::null())
+        .stderr(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap()
 }
 
 pub fn check_msg(result: SerenityResult<Message>){
